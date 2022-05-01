@@ -226,7 +226,8 @@ FROM
     movie m
         INNER JOIN
     genre g ON m.id = g.movie_id
-GROUP BY genre;
+GROUP BY genre 
+order by average_duration desc;
 
 /*
 Drama	106.7746
@@ -262,8 +263,12 @@ Lets find where the movies of genre 'thriller' on the basis of number of movies.
 -- Type your code below:
 
 WITH genre_ranks AS (
-	SELECT g.genre AS genre, count(m.id) AS movie_count, ROW_NUMBER() OVER (ORDER BY count(m.id) DESC) AS genre_rank 
-    FROM movie m INNER JOIN genre g ON m.id = g.movie_id 
+	SELECT 
+		g.genre AS genre, 
+        count(g.movie_id) AS movie_count, 
+        ROW_NUMBER() OVER (ORDER BY count(g.movie_id) DESC) AS genre_rank 
+    FROM 
+		genre g 
     GROUP BY genre
 ) 
 SELECT * FROM genre_ranks WHERE genre = 'Thriller';
@@ -323,7 +328,12 @@ Now, let’s find out the top 10 movies based on average rating.*/
 -- Type your code below:
 -- It's ok if RANK() or DENSE_RANK() is used too
 
-SELECT m.title, r.avg_rating, ROW_NUMBER() OVER (ORDER BY r.avg_rating DESC) AS movie_rank FROM movie m INNER JOIN ratings r ON m.id = r.movie_id LIMIT 10;
+SELECT 
+	m.title, 
+    r.avg_rating, 
+    ROW_NUMBER() OVER (ORDER BY r.avg_rating DESC) AS movie_rank 
+FROM movie m INNER JOIN ratings r ON m.id = r.movie_id 
+LIMIT 10;
 
 /*
 Kirket								10.0	1
@@ -482,16 +492,25 @@ FROM
     ratings r ON m.id = r.movie_id
 WHERE
     avg_rating > 8 AND title LIKE 'The%'
-GROUP BY genre;
+GROUP BY genre, title 
+order by avg_rating desc, genre;
 
 /*
-The Blue Elephant 2			8.8	Drama
-The Blue Elephant 2			8.8	Horror
-The Blue Elephant 2			8.8	Mystery
-The Irishman				8.7	Crime
-Theeran Adhigaaram Ondru	8.3	Action
-Theeran Adhigaaram Ondru	8.3	Thriller
-The King and I				8.2	Romance
+The Brighton Miracle					9.5	Drama
+The Colour of Darkness					9.1	Drama
+The Blue Elephant 2						8.8	Drama
+The Blue Elephant 2						8.8	Horror
+The Blue Elephant 2						8.8	Mystery
+The Irishman							8.7	Crime
+The Irishman							8.7	Drama
+The Mystery of Godliness: The Sequel	8.5	Drama
+The Gambinos							8.4	Crime
+The Gambinos							8.4	Drama
+Theeran Adhigaaram Ondru				8.3	Action
+Theeran Adhigaaram Ondru				8.3	Crime
+Theeran Adhigaaram Ondru				8.3	Thriller
+The King and I							8.2	Drama
+The King and I							8.2	Romance
 
 Some movies have more than 1 genre
 */
@@ -516,12 +535,22 @@ There were 361 such movies
 
 with movie_ratings as (select r.total_votes, m.country from movie m inner join ratings r on m.id = r.movie_id) 
 select 
-	(select count(*) from movie_ratings where country like '%Germany%') as german_movies_votes, 
-    (select count(*) from movie_ratings where country like '%Italy%') as italian_movies_votes;
+	(select sum(total_votes) from movie_ratings where country like '%Germany%') as german_movies_votes, 
+    (select sum(total_votes) from movie_ratings where country like '%Italy%') as italian_movies_votes;
+    
+/*
+German	Italian
+2026223	703024
+*/
+    
+with movie_ratings as (select r.total_votes, m.languages from movie m inner join ratings r on m.id = r.movie_id) 
+select 
+	(select sum(total_votes) from movie_ratings where languages like '%German%') as german_movies_votes, 
+    (select sum(total_votes) from movie_ratings where languages like '%Italian%') as italian_movies_votes;
 
 /*
 German	Italian
-380		202
+4421525	2559540
 
 Yes
 */
@@ -531,13 +560,7 @@ Yes
 /* Now that you have analysed the movies, genres and ratings tables, let us now analyse another table, the names table. 
 Let’s begin by searching for null values in the tables.*/
 
-
-
-
 -- Segment 3:
-
-
-
 -- Q18. Which columns in the names table have null values??
 /*Hint: You can find null values for individual columns or follow below output format
 +---------------+-------------------+---------------------+----------------------+
@@ -595,7 +618,40 @@ where dm.movie_id in (
 	) AND r.avg_rating > 8
 )
 group by n.name 
-order by movie_count desc;
+order by movie_count desc, name;
+
+-- Dharitri
+WITH top_3_genres AS (
+	SELECT 
+		g.genre,
+        count(m.id) AS movie_count,
+		RANK() OVER (ORDER BY count(m.id) DESC) AS rank_genre
+	FROM genre g
+		INNER JOIN movie m ON g.movie_id = m.id
+		INNER JOIN ratings r ON m.id = r.movie_id
+	WHERE avg_rating > 8
+	GROUP BY genre
+	LIMIT 3
+)
+SELECT 
+	*,
+    count(dm.movie_id)
+FROM  
+	director_mapping dm 
+		INNER JOIN genre g USING (movie_id)
+		INNER JOIN names n ON dm.name_id = n.id
+		INNER JOIN top_3_genres USING (genre)
+		INNER JOIN ratings r USING (movie_id)
+WHERE avg_rating > 8
+GROUP BY n.name
+ORDER BY count(dm.movie_id) DESC
+LIMIT 10;
+
+
+/*
+n.name AS director_name,
+    count(dm.movie_id) AS movie_count
+*/
 
 /*
 Marianne Elliott	2
@@ -604,11 +660,17 @@ Anthony Russo		2
 James Mangold		2
 */
 
--- select m.title from movie m where m.id in (
--- 	select movie_id from director_mapping where name_id in (
--- 		select id from names where name = 'James Mangold'
--- 	)
--- );
+select m.title from movie m where m.id in (
+	select movie_id from director_mapping where name_id in (
+		select id from names where name = 'James Mangold'
+	)
+);
+
+select * 
+from names n 
+	inner join director_mapping dm on n.id = dm.name_id 
+	inner join movie m on m.id = dm.movie_id
+where n.name = 'James Mangold';
 
 -- select m.title from movie m where m.id in (
 -- 	select movie_id from director_mapping where name_id in (
@@ -674,14 +736,15 @@ Let’s find out the top three production houses in the world.*/
 +-------------------+-------------------+---------------------+*/
 -- Type your code below:
 
-select m.production_company, sum(r.total_votes) as vote_count, dense_rank() over (order by r.total_votes desc) 
+select m.production_company, sum(r.total_votes) as vote_count, dense_rank() over (order by sum(r.total_votes) desc) 
 from movie m inner join ratings r on m.id = r.movie_id 
-group by m.production_company;
+group by m.production_company 
+limit 3;
 
 /*
-Marvel Studios	2656967	1
-Syncopy			487517	2
-New Line Cinema	599440	3
+Marvel Studios			2656967	1
+Twentieth Century Fox	2411163	2
+Warner Bros.			2396057	3
 */
 
 
@@ -719,7 +782,7 @@ with actor_ranks as (
 	from role_mapping rm 
 		inner join ratings r on rm.movie_id = r.movie_id 
 		inner join movie m on m.id = r.movie_id 
-	where m.country like '%India%'
+	where m.country like '%India%' and rm.category = 'actor'
 	group by rm.name_id 
 	having movie_count >= 5 
 	order by actor_rank, total_votes desc
@@ -731,8 +794,8 @@ from names n inner join actor_ranks ar on n.id = ar.name_id;
 Vijay Sethupathi	23114	5	8.42	1
 Fahadh Faasil		13557	5	7.99	2
 Yogi Babu			8500	11	7.83	3
-Taapsee Pannu		18895	5	7.70	4
-Joju George			3926	5	7.58	5
+Joju George			3926	5	7.58	4
+Ammy Virk			2504	6	7.55	5
 */
 
 -- Top actor is Vijay Sethupathi
@@ -841,7 +904,7 @@ Mystery		101.80			931.83					103.54
 Others		100.16			1031.99					103.20
 Romance		109.53			1141.53					103.78
 Sci-Fi		97.94			1239.47					103.29
-Thriller	101.58	1341.05	103.16
+Thriller	101.58			1341.05					103.16
 */
 
 -- Round is good to have and not a must have; Same thing applies to sorting
@@ -865,6 +928,7 @@ Thriller	101.58	1341.05	103.16
 
 -- Top 3 Genres based on most number of movies
 
+-- TODO: Change currency; This result is wrong.
 with ranks as (
 	select genre, m.year, title as movie_name, worlwide_gross_income, dense_rank() over (partition by m.year order by worlwide_gross_income desc) as movie_rank 
 	from genre g inner join movie m on g.movie_id = m.id 
@@ -879,7 +943,25 @@ with ranks as (
 )
 select * from ranks where movie_rank <= 5;
 
-
+/*
+Drama		2017	Shatamanam Bhavati			INR 530500000	1
+Drama		2017	Winner						INR 250000000	2
+Drama		2017	Thank You for Your Service	$ 9995692		3
+Comedy		2017	The Healer					$ 9979800		4
+Drama		2017	The Healer					$ 9979800		4
+Thriller	2017	Gi-eok-ui bam				$ 9968972		5
+Thriller	2018	The Villain					INR 1300000000	1
+Drama		2018	Antony & Cleopatra			$ 998079		2
+Comedy		2018	La fuitina sbagliata		$ 992070		3
+Drama		2018	Zaba						$ 991			4
+Comedy		2018	Gung-hab					$ 9899017		5
+Thriller	2019	Prescience					$ 9956			1
+Thriller	2019	Joker						$ 995064593		2
+Drama		2019	Joker						$ 995064593		2
+Comedy		2019	Eaten by Lions				$ 99276			3
+Comedy		2019	Friend Zone					$ 9894885		4
+Drama		2019	Nur eine Frau				$ 9884			5
+*/
 
 -- Finally, let’s find out the names of the top two production houses that have produced the highest number of hits among multilingual movies.
 -- Q27.  Which are the top two production houses that have produced the highest number of hits (median rating >= 8) among multilingual movies?
@@ -919,16 +1001,65 @@ limit 2;
 -- Type your code below:
 
 with top_drama as (
-	select rm.name_id, sum(total_votes) as total_votes, count(rm.movie_id) as movie_count, avg_rating as actress_avg_rating, dense_rank() over (order by count(rm.movie_id) desc) as actress_rank 
+	select 
+		rm.name_id, 
+        sum(total_votes) as total_votes, 
+        count(rm.movie_id) as movie_count, 
+        avg_rating as actress_avg_rating, 
+        dense_rank() over (order by count(rm.movie_id) desc) as actress_rank 
 	from genre g 
 		inner join ratings r on g.movie_id = r.movie_id 
 		inner join role_mapping rm on rm.movie_id = g.movie_id 
-	where genre = 'Drama' and rm.category = 'actress' 
-	group by rm.name_id 
-	having avg_rating > 8
+	where genre = 'Drama' and rm.category = 'actress' and avg_rating > 8
+	group by rm.name_id
 )
 select n.name, total_votes, movie_count, actress_avg_rating, actress_rank 
 from top_drama td inner join names n on td.name_id = n.id;
+
+-- Having the join with names in a single query
+select 
+	n.name, 
+	sum(total_votes) as total_votes, 
+	count(rm.movie_id) as movie_count, 
+	avg_rating as actress_avg_rating, 
+	dense_rank() over (order by count(rm.movie_id) desc) as actress_rank 
+from genre g 
+	inner join ratings r on g.movie_id = r.movie_id 
+	inner join role_mapping rm on rm.movie_id = g.movie_id 
+    inner join names n on rm.name_id = n.id
+where genre = 'Drama' and rm.category = 'actress' and avg_rating > 8
+group by n.name;
+
+-- How many Drama movies has Teresa Palmer acted in?
+select * from names where name = 'Teresa Palmer';
+
+select * 
+from movie m inner join genre g on m.id = g.movie_id 
+	inner join role_mapping rm on rm.movie_id = m.id 
+    inner join names n on n.id = rm.name_id 
+    inner join ratings r on r.movie_id = m.id 
+where n.name = 'Teresa Palmer' and g.genre = 'Drama' and r.avg_rating > 8;
+
+-- Dharitri
+WITH actress_summary AS 
+(
+	SELECT 
+		n.name AS actress_name,
+        sum(total_votes) AS total_votes,
+        count(rm.movie_id) AS movie_count,
+        avg_rating AS actress_avg_rating
+	FROM 
+		movie m
+			INNER JOIN ratings r ON m.id= r.movie_id
+			INNER JOIN role_mapping rm ON rm.movie_id= m.id
+			INNER JOIN names n ON rm.name_id= n.id
+            INNER JOIN Genre g ON g.movie_id=m.id
+	WHERE category='ACTRESS' AND genre='Drama' AND avg_rating > 8
+	GROUP BY actress_name
+)
+SELECT *, DENSE_RANK()OVER(ORDER BY movie_count DESC) AS actress_rank
+FROM actress_summary
+LIMIT 3;
 
 
 /* Q29. Get the following details for top 9 directors (based on number of movies)
@@ -965,7 +1096,7 @@ with movie_dates as
 	select 
 		dm.name_id as director_id, 
         date_published,
-        lead(date_published, 1) over (partition by dm.name_id order by date_published) as next_movie_by_dir
+        lead(date_published) over (partition by dm.name_id order by date_published) as next_movie_by_dir
 	from 
 		movie m inner join director_mapping dm on m.id = dm.movie_id 
 	group by movie_id, director_id, date_published
@@ -990,7 +1121,7 @@ select
     count(dm.movie_id) as num_movies,
     avg_inter_movie_days,
     round(avg(avg_rating), 2) as avg_rating,
-    total_votes,
+    sum(total_votes) as total_votes,
     min(avg_rating) as min_rating,
     max(avg_rating) as max_rating,
     sum(duration) as total_duration,
@@ -1002,4 +1133,5 @@ from
         inner join ratings r on r.movie_id = dm.movie_id 
         inner join names n on dm.name_id = n.id 
 group by director_id 
+order by num_movies desc, director_name 
 limit 9;
